@@ -1,6 +1,6 @@
 [package]
 name = "dumb-exec"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Angelo Bulfone <mbulfone@gmail.com>"]
 keywords = ["futures"]
 categories = ["asynchronous", "no-std"]
@@ -15,5 +15,4 @@ that doesn't allocate and can be used in no_std environments.
 
 [dependencies.futures-preview]
 version = "0.3.0-alpha"
-default-features = false
 features = ["nightly"]
