@@ -1,11 +1,13 @@
 [package]
 name = "dumb-exec"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Angelo Bulfone <mbulfone@gmail.com>"]
 keywords = ["futures"]
 categories = ["asynchronous", "no-std"]
 license = "MIT"
 repository = "https://github.com/boomshroom/dumb-exec"
+homepage = "https://github.com/boomshroom/dumb-exec"
+readme = "README.md"
 description = """
 A very simple and dumb implementation of a futures executor
 that doesn't allocate and can be used in no_std environments.
