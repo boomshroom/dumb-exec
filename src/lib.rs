@@ -5,7 +5,7 @@
 //! As well as versions to use in multithreaded contexts such as multiproccessing operating systems.
 
 #![no_std]
-#![feature(futures_api, pin, const_fn, nll, extern_prelude)]
+#![feature(futures_api, pin, const_fn, nll, extern_prelude, cell_update)]
 #![warn(missing_docs, missing_debug_implementations)]
 
 extern crate futures;

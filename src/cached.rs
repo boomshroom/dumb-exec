@@ -8,9 +8,8 @@ use core::iter;
 use core::pin::PinMut;
 use core::ops::Deref;
 use core::sync::atomic::{self, AtomicBool, Ordering};
-use futures::future::{Future, FutureObj, LocalFutureObj, FutureExt};
+use futures::future::{Future, FutureObj, LocalFutureObj};
 use futures::task::{Context, LocalWaker, Poll, Spawn, SpawnObjError, UnsafeWake, Waker};
-use spin::Mutex;
 
 /// An executor capable of running multiple `Future`s concurrently.
 /// It operates on a fixed size buffer provided by the user.
@@ -20,12 +19,13 @@ use spin::Mutex;
 pub struct CachedExec<T: AsRef<[Task]>> {
     storage: T,
     next: Cell<usize>,
+    count: Cell<usize>,
 }
 
 #[derive(Debug)]
 struct TaskInner {
     ready: Flag,
-    task: Mutex<LocalFutureObj<'static, ()>>,
+    task: RefCell<LocalFutureObj<'static, ()>>,
 }
 
 #[derive(Debug)]
@@ -37,7 +37,7 @@ struct Flag(AtomicBool);
 #[derive(Default, Debug)]
 pub struct Task(RefCell<Option<TaskInner>>);
 
-struct ChildExec<'a, T: AsRef<[Task]>> {
+struct ChildExec<'a, T: 'a + AsRef<[Task]>> {
     parent: &'a CachedExec<T>,
 }
 
@@ -73,21 +73,31 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
         CachedExec {
             storage: cache,
             next: Cell::new(0),
+            count: Cell::new(0),
         }
     }
 
-    pub fn run<O, F: Future<Output=O>>(&self, f: F) -> O {
-        unsafe {
-            let mut output : O = core::mem::uninitialized();
-            let mut new_f = f.map(|val| {
-                let hack = &mut output as &'static mut _;
-                *hack = val;
-            });
-            let pinned = LocalFutureObj::new( PinMut::new_unchecked(&mut new_f)) as LocalFutureObj<'static, ()>;
-
-            let task = self.spawn_raw(pinned);
-            while !self.run_once(&task) {};
-            output
+    /// Runs all stored futures. Blocks until all futures are complete.
+    pub fn run(&self) {
+        for (_, cell) in self.task_iter() {
+            if self.count.get() == 0 {
+                return;
+            }
+            match cell.0.try_borrow() {
+                Err(_) => continue,
+                Ok(task) => {
+                    let task = match task.as_ref() {
+                        Some(t) => t,
+                        None => continue,
+                    };
+                    if self.run_once(task) {
+                        drop(task);
+                        cell.0.replace(None);
+                        self.count.update(|v| v-1);
+                    }
+                }
+            }
+            atomic::spin_loop_hint();
         }
     }
 
@@ -114,15 +124,15 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
     fn spawn_raw(&self, future: LocalFutureObj<'static, ()>) -> Ref<TaskInner> {
         let new_task = Some(TaskInner {
             ready: Flag::true_(),
-            task: Mutex::new(future),
+            task: RefCell::new(future),
         });
 
         for (idx, cell) in self.task_iter().take(self.storage.as_ref().len()) {
-            match cell.0.try_borrow_mut() {
+            match cell.0.try_borrow() {
                 Err(_) => continue,
-                Ok(mut cell) => if cell.is_none() {
-                    *cell = new_task;
-                    drop(cell);
+                Ok(task) => if task.is_none() {
+                    drop(task);
+                    cell.0.replace(new_task);
                     self.set_next(idx);
                     return self.get_inner(idx);
                 },
@@ -130,13 +140,14 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
         }
 
         for (idx, cell) in self.task_iter() {
-            match cell.0.try_borrow_mut() {
+            match cell.0.try_borrow() {
                 Err(_) => continue,
-                Ok(mut cell) => {
-                    let task = cell.as_ref().unwrap();
+                Ok(task) => {
+                    let task = task.as_ref().unwrap();
                     if self.run_once(task) {
-                        *cell = new_task;
                         drop(cell);
+                        cell.0.replace(new_task);
+                        
                         self.set_next(idx);
                         return self.get_inner(idx);
                     }
@@ -149,9 +160,9 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
 
     fn run_once(&self, task: &TaskInner) -> bool {
         if task.ready.compare_and_swap(true, false, Ordering::Acquire) {
-            let mut inner = match task.task.try_lock() {
-                None => return false,
-                Some(inner) => inner,
+            let mut inner = match task.task.try_borrow_mut() {
+                Err(_) => return false,
+                Ok(inner) => inner,
             };
             let future = PinMut::new(&mut *inner);
             let mut child = ChildExec { parent: &self };
