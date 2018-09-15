@@ -5,10 +5,11 @@
 //! As well as versions to use in multithreaded contexts such as multiproccessing operating systems.
 
 #![no_std]
-#![feature(futures_api, pin)]
+#![feature(futures_api, pin, const_fn, nll, extern_prelude)]
 #![warn(missing_docs, missing_debug_implementations)]
 
 extern crate futures;
+extern crate spin;
 
 #[cfg(test)]
 #[macro_use]
@@ -22,6 +23,7 @@ use core::sync::atomic;
 use future::FutureObj;
 use task::{Context, LocalWaker, Spawn, SpawnObjError};
 
+pub mod cached;
 mod wake;
 
 use wake::DumbWake;
@@ -30,7 +32,7 @@ use wake::DumbWake;
 /// Can be used simply with `let result = DumbExec::new().run(future)`
 /// or can be shared for multiple tasks.
 /// Warning: runs tasks sequentially with no true asynchronicity!
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DumbExec {
     _opaque: (),
 }
@@ -62,14 +64,18 @@ impl DumbExec {
 }
 
 impl Spawn for DumbExec {
+    #[inline]
     fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnObjError> {
-        Ok(self.run(future))
+        self.run(future);
+        Ok(())
     }
 }
 
 impl<'a> Spawn for ChildExec<'a> {
+    #[inline]
     fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnObjError> {
-        Ok(self.parent.run(future))
+        self.parent.run(future);
+        Ok(())
     }
 }
 
