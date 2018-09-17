@@ -37,10 +37,6 @@ pub struct DumbExec {
     _opaque: (),
 }
 
-struct ChildExec<'a> {
-    parent: &'a DumbExec,
-}
-
 impl DumbExec {
     /// Allocates a new `DumbExec` for use.
     pub fn new() -> DumbExec {
@@ -52,7 +48,7 @@ impl DumbExec {
         let mut future = future;
         let mut future_pin = PinMut::new(&mut future);
         let local_waker = unsafe { LocalWaker::new(DumbWake::get()) };
-        let mut child = ChildExec { parent: &self };
+        let mut child = self;
         let mut ctx = Context::new(&local_waker, &mut child);
         loop {
             match Future::poll(future_pin.reborrow(), &mut ctx) {
@@ -71,10 +67,10 @@ impl Spawn for DumbExec {
     }
 }
 
-impl<'a> Spawn for ChildExec<'a> {
+impl<'a> Spawn for &'a DumbExec {
     #[inline]
     fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnObjError> {
-        self.parent.run(future);
+        self.run(future);
         Ok(())
     }
 }

@@ -37,10 +37,6 @@ struct Flag(AtomicBool);
 #[derive(Default, Debug)]
 pub struct Task(RefCell<Option<TaskInner>>);
 
-struct ChildExec<'a, T: 'a + AsRef<[Task]>> {
-    parent: &'a CachedExec<T>,
-}
-
 impl Task {
     /// Initialize an empty `Task`.
     pub const fn new() -> Task {
@@ -165,7 +161,7 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
                 Ok(inner) => inner,
             };
             let future = PinMut::new(&mut *inner);
-            let mut child = ChildExec { parent: &self };
+            let mut child = self;
             let waker = unsafe { LocalWaker::new((&task.ready as &UnsafeWake).into()) };
             let mut ctx = Context::new(&waker, &mut child);
             match Future::poll(future, &mut ctx) {
@@ -186,9 +182,9 @@ impl<T: AsRef<[Task]>> Spawn for CachedExec<T> {
     }
 }
 
-impl<'a, T: AsRef<[Task]>> Spawn for ChildExec<'a, T> {
+impl<'a, T: AsRef<[Task]>> Spawn for &'a CachedExec<T> {
     fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnObjError> {
-        self.parent.spawn_raw(future.into());
+        self.spawn_raw(future.into());
         Ok(())
     }
 }
