@@ -3,10 +3,10 @@
 //! `Task::init` is provided to facilitate this initialization by giving
 //! an infinite iterator of empty `Task`s.
 
-use core::cell::{Cell, RefCell, Ref};
+use core::cell::{Cell, Ref, RefCell};
 use core::iter;
-use core::pin::PinMut;
 use core::ops::Deref;
+use core::pin::PinMut;
 use core::sync::atomic::{self, AtomicBool, Ordering};
 use futures::future::{Future, FutureObj, LocalFutureObj};
 use futures::task::{Context, LocalWaker, Poll, Spawn, SpawnObjError, UnsafeWake, Waker};
@@ -89,7 +89,7 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
                     if self.run_once(task) {
                         drop(task);
                         cell.0.replace(None);
-                        self.count.update(|v| v-1);
+                        self.count.update(|v| v - 1);
                     }
                 }
             }
@@ -114,7 +114,9 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
 
     #[inline]
     fn get_inner(&self, idx: usize) -> Ref<TaskInner> {
-        Ref::map(self.storage.as_ref()[idx].0.borrow(), |t| t.as_ref().unwrap())
+        Ref::map(self.storage.as_ref()[idx].0.borrow(), |t| {
+            t.as_ref().unwrap()
+        })
     }
 
     fn spawn_raw(&self, future: LocalFutureObj<'static, ()>) -> Ref<TaskInner> {
@@ -143,7 +145,7 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
                     if self.run_once(task) {
                         drop(cell);
                         cell.0.replace(new_task);
-                        
+
                         self.set_next(idx);
                         return self.get_inner(idx);
                     }
@@ -190,12 +192,16 @@ impl<'a, T: AsRef<[Task]>> Spawn for &'a CachedExec<T> {
 }
 
 impl Flag {
-    const fn true_() -> Flag { Flag (AtomicBool::new(true)) }
+    const fn true_() -> Flag {
+        Flag(AtomicBool::new(true))
+    }
 }
 
 impl Deref for Flag {
     type Target = AtomicBool;
-    fn deref(&self) -> &AtomicBool { &self.0 }
+    fn deref(&self) -> &AtomicBool {
+        &self.0
+    }
 }
 
 unsafe impl UnsafeWake for Flag {
