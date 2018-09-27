@@ -81,13 +81,13 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
             }
             match cell.0.try_borrow() {
                 Err(_) => continue,
-                Ok(task) => {
-                    let task = match task.as_ref() {
+                Ok(task_) => {
+                    let task = match task_.as_ref() {
                         Some(t) => t,
                         None => continue,
                     };
                     if self.run_once(task) {
-                        drop(task);
+                        drop(task_);
                         cell.0.replace(None);
                         self.count.update(|v| v - 1);
                     }
