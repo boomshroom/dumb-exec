@@ -15,6 +15,10 @@ extern crate spin;
 #[macro_use]
 extern crate std;
 
+#[cfg(alloc)]
+#[macro_use]
+extern crate alloc;
+
 use futures::prelude::*;
 
 use core::marker::Unpin;
@@ -22,6 +26,9 @@ use core::pin::PinMut;
 use core::sync::atomic;
 use future::FutureObj;
 use task::{Context, LocalWaker, Spawn, SpawnObjError};
+
+//#[cfg(alloc)]
+//pub use threaded;
 
 pub mod cached;
 mod wake;
