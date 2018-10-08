@@ -6,14 +6,14 @@
 use core::cell::{Cell, Ref, RefCell};
 use core::iter;
 use core::ops::Deref;
-use core::pin::PinMut;
+use core::pin::Pin;
 use core::sync::atomic::{self, AtomicBool, Ordering};
 use futures::future::{Future, FutureObj, LocalFutureObj};
-use futures::task::{Context, LocalWaker, Poll, Spawn, SpawnObjError, UnsafeWake, Waker};
+use futures::task::{LocalWaker, Poll, Spawn, LocalSpawn, UnsafeWake, Waker, SpawnError};
 
 /// An executor capable of running multiple `Future`s concurrently.
 /// It operates on a fixed size buffer provided by the user.
-/// Atempting to exceed this buffer will block and cause the queued
+/// Attempting to exceed this buffer will block and cause the queued
 /// tasks to execute.
 #[derive(Debug)]
 pub struct CachedExec<T: AsRef<[Task]>> {
@@ -52,8 +52,8 @@ impl Task {
     ///     buffer
     /// };
     /// ```
-    /// Note that this unnessisary for arrays smaller than 32,
-    /// as they can be initiallized with `Default::default()`.
+    /// Note that this unnecessary for arrays smaller than 32,
+    /// as they can be initialized with `Default::default()`.
     /// This can also be used with one of the various
     /// array initializer crates, or, if `alloc` is used,
     /// `collect`ed into a `Vec`.
@@ -153,7 +153,7 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
             }
             atomic::spin_loop_hint();
         }
-        unreachable!(); // Iterator in infinite.
+        unreachable!(); // Iterator is infinite.
     }
 
     fn run_once(&self, task: &TaskInner) -> bool {
@@ -162,11 +162,9 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
                 Err(_) => return false,
                 Ok(inner) => inner,
             };
-            let future = PinMut::new(&mut *inner);
-            let mut child = self;
+            let future = Pin::new(&mut *inner);
             let waker = unsafe { LocalWaker::new((&task.ready as &UnsafeWake).into()) };
-            let mut ctx = Context::new(&waker, &mut child);
-            match Future::poll(future, &mut ctx) {
+            match Future::poll(future, &waker) {
                 Poll::Pending => false,
                 Poll::Ready(()) => true,
             }
@@ -178,15 +176,30 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
 
 impl<T: AsRef<[Task]>> Spawn for CachedExec<T> {
     #[inline]
-    fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnObjError> {
+    fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
         self.spawn_raw(future.into());
         Ok(())
     }
 }
 
 impl<'a, T: AsRef<[Task]>> Spawn for &'a CachedExec<T> {
-    fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnObjError> {
+    fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
         self.spawn_raw(future.into());
+        Ok(())
+    }
+}
+
+impl<T: AsRef<[Task]>> LocalSpawn for CachedExec<T> {
+    #[inline]
+    fn spawn_local_obj(&mut self, future: LocalFutureObj<'static, ()>) -> Result<(), SpawnError> {
+        self.spawn_raw(future);
+        Ok(())
+    }
+}
+
+impl<'a, T: AsRef<[Task]>> LocalSpawn for &'a CachedExec<T> {
+    fn spawn_local_obj(&mut self, future: LocalFutureObj<'static, ()>) -> Result<(), SpawnError> {
+        self.spawn_raw(future);
         Ok(())
     }
 }

@@ -1,6 +1,7 @@
 [package]
 name = "dumb-exec"
-version = "0.0.4"
+version = "0.0.5"
+edition = "2018"
 authors = ["Angelo Bulfone <mbulfone@gmail.com>"]
 keywords = ["futures"]
 categories = ["asynchronous", "no-std"]
@@ -19,7 +20,8 @@ alloc = []
 
 [dependencies]
 spin = "0.4.9"
+pin-utils = "0.1.0-alpha"
 
 [dependencies.futures-preview]
-version = "0.3.0-alpha"
+version = "0.3.0-alpha.7"
 features = ["nightly"]

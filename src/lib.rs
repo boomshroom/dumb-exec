@@ -5,10 +5,11 @@
 //! As well as versions to use in multithreaded contexts such as multiproccessing operating systems.
 
 #![no_std]
-#![feature(futures_api, pin, const_fn, nll, extern_prelude, cell_update)]
+#![feature(futures_api, pin, const_fn, nll, cell_update)]
 #![warn(missing_docs, missing_debug_implementations)]
 
 extern crate futures;
+#[macro_use] extern crate pin_utils;
 extern crate spin;
 
 #[cfg(test)]
@@ -21,11 +22,9 @@ extern crate alloc;
 
 use futures::prelude::*;
 
-use core::marker::Unpin;
-use core::pin::PinMut;
 use core::sync::atomic;
-use future::FutureObj;
-use task::{Context, LocalWaker, Spawn, SpawnObjError};
+use futures::future::{FutureObj, LocalFutureObj};
+use futures::task::{Spawn, LocalSpawn, Poll, LocalWaker, SpawnError};
 
 //#[cfg(alloc)]
 //pub use threaded;
@@ -33,7 +32,7 @@ use task::{Context, LocalWaker, Spawn, SpawnObjError};
 pub mod cached;
 mod wake;
 
-use wake::DumbWake;
+use self::wake::DumbWake;
 
 /// The primary component of the crate.
 /// Can be used simply with `let result = DumbExec::new().run(future)`
@@ -51,14 +50,11 @@ impl DumbExec {
     }
 
     /// Runs the provided future on this executor. Blocks until the future is complete and returns its result.
-    pub fn run<F: Future + Unpin>(&self, future: F) -> F::Output {
-        let mut future = future;
-        let mut future_pin = PinMut::new(&mut future);
+    pub fn run<F: Future>(&self, future: F) -> F::Output {
+        pin_mut!(future);
         let local_waker = unsafe { LocalWaker::new(DumbWake::get()) };
-        let mut child = self;
-        let mut ctx = Context::new(&local_waker, &mut child);
         loop {
-            match Future::poll(future_pin.reborrow(), &mut ctx) {
+            match Future::poll(future.as_mut(), &local_waker) {
                 Poll::Pending => atomic::spin_loop_hint(),
                 Poll::Ready(v) => return v,
             }
@@ -68,7 +64,7 @@ impl DumbExec {
 
 impl Spawn for DumbExec {
     #[inline]
-    fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnObjError> {
+    fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
         self.run(future);
         Ok(())
     }
@@ -76,7 +72,23 @@ impl Spawn for DumbExec {
 
 impl<'a> Spawn for &'a DumbExec {
     #[inline]
-    fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnObjError> {
+    fn spawn_obj(&mut self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
+        self.run(future);
+        Ok(())
+    }
+}
+
+impl LocalSpawn for DumbExec {
+    #[inline]
+    fn spawn_local_obj(&mut self, future: LocalFutureObj<'static, ()>) -> Result<(), SpawnError> {
+        self.run(future);
+        Ok(())
+    }
+}
+
+impl<'a> LocalSpawn for &'a DumbExec {
+    #[inline]
+    fn spawn_local_obj(&mut self, future: LocalFutureObj<'static, ()>) -> Result<(), SpawnError> {
         self.run(future);
         Ok(())
     }
