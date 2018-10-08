@@ -9,7 +9,8 @@
 #![warn(missing_docs, missing_debug_implementations)]
 
 extern crate futures;
-#[macro_use] extern crate pin_utils;
+#[macro_use]
+extern crate pin_utils;
 extern crate spin;
 
 #[cfg(test)]
@@ -24,7 +25,7 @@ use futures::prelude::*;
 
 use core::sync::atomic;
 use futures::future::{FutureObj, LocalFutureObj};
-use futures::task::{Spawn, LocalSpawn, Poll, LocalWaker, SpawnError};
+use futures::task::{LocalSpawn, LocalWaker, Poll, Spawn, SpawnError};
 
 //#[cfg(alloc)]
 //pub use threaded;

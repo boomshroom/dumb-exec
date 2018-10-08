@@ -9,7 +9,7 @@ use core::ops::Deref;
 use core::pin::Pin;
 use core::sync::atomic::{self, AtomicBool, Ordering};
 use futures::future::{Future, FutureObj, LocalFutureObj};
-use futures::task::{LocalWaker, Poll, Spawn, LocalSpawn, UnsafeWake, Waker, SpawnError};
+use futures::task::{LocalSpawn, LocalWaker, Poll, Spawn, SpawnError, UnsafeWake, Waker};
 
 /// An executor capable of running multiple `Future`s concurrently.
 /// It operates on a fixed size buffer provided by the user.
@@ -128,22 +128,24 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
         for (idx, cell) in self.task_iter().take(self.storage.as_ref().len()) {
             match cell.0.try_borrow() {
                 Err(_) => continue,
-                Ok(task) => if task.is_none() {
-                    drop(task);
-                    cell.0.replace(new_task);
-                    self.set_next(idx);
-                    return self.get_inner(idx);
-                },
+                Ok(task) => {
+                    if task.is_none() {
+                        drop(task);
+                        cell.0.replace(new_task);
+                        self.set_next(idx);
+                        return self.get_inner(idx);
+                    }
+                }
             }
         }
 
         for (idx, cell) in self.task_iter() {
             match cell.0.try_borrow() {
                 Err(_) => continue,
-                Ok(task) => {
-                    let task = task.as_ref().unwrap();
+                Ok(task_) => {
+                    let task = task_.as_ref().unwrap();
                     if self.run_once(task) {
-                        drop(cell);
+                        drop(task_);
                         cell.0.replace(new_task);
 
                         self.set_next(idx);
