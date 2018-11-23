@@ -20,6 +20,8 @@ impl From<usize> for TaskId {
     }
 }
 
+/// An execution context to act as a no_std compatible thread pool.
+/// Threads must be spawned manually with Executor::run.
 #[derive(Debug)]
 pub struct Executor<'f> {
     ready: Mutex<VecDeque<TaskId>>,
@@ -74,17 +76,24 @@ impl <'a, 'f> Thread<'a, 'f> {
             };
         };
     }
-
-    pub fn run(&mut self) {
-        loop {
-            self.run_once()
-        }
-    }
 }
 
 impl <'f> Executor<'f> {
     fn next_id(&self) -> TaskId {
         TaskId(self.counter.fetch_add(1, Ordering::Relaxed))
+    }
+
+    /// Run an event loop on the current thread.
+    /// Does not terminate.
+    pub fn run<'a>(&'a self) {
+        let t = Thread {
+            parent: self,
+            tasks: Mutex::new(VecDeque::new()),
+            local_tasks: BTreeMap::new(),
+        };
+        loop {
+            t.run_once();
+        }
     }
 }
 
