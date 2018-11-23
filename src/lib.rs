@@ -5,7 +5,7 @@
 //! As well as versions to use in multithreaded contexts such as multiproccessing operating systems.
 
 #![no_std]
-#![feature(futures_api, pin, const_fn, nll, cell_update)]
+#![feature(futures_api, pin, const_fn, nll, cell_update, alloc, arbitrary_self_types)]
 #![warn(missing_docs, missing_debug_implementations)]
 
 extern crate futures;
@@ -18,7 +18,6 @@ extern crate spin;
 extern crate std;
 
 #[cfg(alloc)]
-#[macro_use]
 extern crate alloc;
 
 use futures::prelude::*;
@@ -27,8 +26,8 @@ use core::sync::atomic;
 use futures::future::{FutureObj, LocalFutureObj};
 use futures::task::{LocalSpawn, LocalWaker, Poll, Spawn, SpawnError};
 
-//#[cfg(alloc)]
-//pub use threaded;
+#[cfg(alloc)]
+pub mod threaded;
 
 pub mod cached;
 mod wake;

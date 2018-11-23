@@ -6,9 +6,8 @@
 use core::cell::{Cell, Ref, RefCell};
 use core::iter;
 use core::ops::Deref;
-use core::pin::Pin;
 use core::sync::atomic::{self, AtomicBool, Ordering};
-use futures::future::{Future, FutureObj, LocalFutureObj};
+use futures::future::{FutureExt, FutureObj, LocalFutureObj};
 use futures::task::{LocalSpawn, LocalWaker, Poll, Spawn, SpawnError, UnsafeWake, Waker};
 
 /// An executor capable of running multiple `Future`s concurrently.
@@ -47,6 +46,7 @@ impl Task {
     /// # Example
     /// ```
     /// let buffer = unsafe {
+    ///     use dumb_exec::cached::Task;
     ///     let mut buffer : [Task; 256] = core::mem::uninitialized();
     ///     buffer.iter_mut().zip(Task::init()).for_each(|(cell, empty)| core::ptr::write(cell as *mut _, empty));
     ///     buffer
@@ -119,7 +119,7 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
         })
     }
 
-    fn spawn_raw(&self, future: LocalFutureObj<'static, ()>) -> Ref<TaskInner> {
+    fn spawn_raw(&self, future: LocalFutureObj<'static,()>) -> Ref<TaskInner> {
         let new_task = Some(TaskInner {
             ready: Flag::true_(),
             task: RefCell::new(future),
@@ -160,13 +160,13 @@ impl<T: AsRef<[Task]>> CachedExec<T> {
 
     fn run_once(&self, task: &TaskInner) -> bool {
         if task.ready.compare_and_swap(true, false, Ordering::Acquire) {
-            let mut inner = match task.task.try_borrow_mut() {
+            let mut future = match task.task.try_borrow_mut() {
                 Err(_) => return false,
                 Ok(inner) => inner,
             };
-            let future = Pin::new(&mut *inner);
+            //let future = Pin::new(&mut *inner);
             let waker = unsafe { LocalWaker::new((&task.ready as &UnsafeWake).into()) };
-            match Future::poll(future, &waker) {
+            match future.poll_unpin(&waker) {
                 Poll::Pending => false,
                 Poll::Ready(()) => true,
             }
